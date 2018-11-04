@@ -128,32 +128,49 @@ public:
 		dialect_[AKEYCODE_SWITCH_CHARSET] = KeySwitchCharset;
 	}
 
-	InputDevice::DeviceVariant GetVariant() const
+	InputDevice::DeviceVariant GetVariant() const override
 	{
 		return InputDevice::DV_STANDARD;
 	}
 
-	void Update(InputDeltaState* delta)
+	void Update(InputDeltaState* delta) override
 	{
 		delta_ = delta;
 		*state_ = nextState_;
 	}
 
-	bool IsTextInputEnabled() const { return textInputEnabled_; }
-	void SetTextInputEnabled(bool enabled) { textInputEnabled_ = enabled; }
+	bool IsTextInputEnabled() const override { return textInputEnabled_; }
+	void SetTextInputEnabled(bool enabled) override { textInputEnabled_ = enabled; }
 
-	char GetNextCharacter(gainput::DeviceButtonId buttonId)
+	virtual InputState * GetNextInputState() override
+    {
+		return &nextState_;
+	}
+
+	char GetNextCharacter(gainput::DeviceButtonId buttonId) override
 	{
 		if (!textBuffer_.CanGet())
 		{
 			return 0;
 		}
-		return textBuffer_.Get();
-	}
+		InputCharDesc currentDesc = textBuffer_.Get();
 
-	InputState* GetNextInputState()
-	{
-		return &nextState_;
+		//Removed buffered inputs for which we didn't call GetNextCharacter
+		if (buttonId != gainput::InvalidDeviceButtonId && buttonId < gainput::KeyCount_)
+		{
+			while (currentDesc.buttonId != buttonId)
+			{
+				if (!textBuffer_.CanGet())
+				{
+					return 0;
+				}
+				currentDesc = textBuffer_.Get();
+			}
+		}
+
+		//if button id was provided then we return the appropriate character
+		//else we return the first buffered character
+		return currentDesc.inputChar;
 	}
 
 	int32_t HandleInput(AInputEvent* event)

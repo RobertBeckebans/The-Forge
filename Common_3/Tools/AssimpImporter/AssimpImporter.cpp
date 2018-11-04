@@ -1,9 +1,9 @@
 /*
  * Copyright (c) 2018 Confetti Interactive Inc.
- * 
+ *
  * This file is part of The-Forge
  * (see https://github.com/ConfettiFX/The-Forge).
- * 
+ *
  * Licensed to the Apache Software Foundation (ASF) under one
  * or more contributor license agreements.  See the NOTICE file
  * distributed with this work for additional information
@@ -11,9 +11,9 @@
  * to you under the Apache License, Version 2.0 (the
  * "License"); you may not use this file except in compliance
  * with the License.  You may obtain a copy of the License at
- * 
+ *
  *   http://www.apache.org/licenses/LICENSE-2.0
- * 
+ *
  * Unless required by applicable law or agreed to in writing,
  * software distributed under the License is distributed on an
  * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
@@ -252,11 +252,19 @@ static void CollectMaterials(const aiScene* pScene, Model* pModel, tinystl::unor
 				pModel->mMaterialList[matIndex].mProperties.insert({ tinystl::string(pProp->mKey.C_Str()), prop });
 			}
 
-			for (uint32_t textrureType = 0; textrureType < AI_TEXTURE_TYPE_MAX; ++textrureType)
+			for (uint32_t textureType = 0; textureType < AI_TEXTURE_TYPE_MAX; ++textureType)
 			{
 				aiString name;
-				aiGetMaterialTexture(aiMaterial, (aiTextureType)textrureType, 0, &name);
-				pModel->mMaterialList[matIndex].mTextureMaps[textrureType] = name.C_Str();
+				aiGetMaterialTexture(aiMaterial, (aiTextureType)textureType, 0, &name);
+				pModel->mMaterialList[matIndex].mTextureMaps[textureType] = name.C_Str();
+			}
+			
+			// Set glTF metallic roughness texture
+			if (aiGetMaterialTextureCount(aiMaterial, aiTextureType_UNKNOWN) != 0)
+			{
+				aiString name;
+				aiGetMaterialTexture(aiMaterial, aiTextureType_UNKNOWN, 0, &name);	// glTF metallic roughness texture will always be in index 0
+				pModel->mMaterialList[matIndex].mTextureMaps[TEXTURE_MAP_GLTF_METALLIC_ROUGHNESS] = name.C_Str();
 			}
 
 			//Ge the material name
@@ -293,7 +301,6 @@ bool AssimpImporter::ImportModel(const char* filename, Model* pModel)
 		aiProcess_ImproveCacheLocality |
 		aiProcess_FindDegenerates |
 		aiProcess_FindInvalidData |
-		aiProcess_FixInfacingNormals |
 		aiProcess_JoinIdenticalVertices |
 		aiProcess_ConvertToLeftHanded;
 	flags &= ~aiProcess_SortByPType;
@@ -301,12 +308,12 @@ bool AssimpImporter::ImportModel(const char* filename, Model* pModel)
 
 	const aiScene* pScene = aiImportFileExWithProperties(filename, flags, nullptr, propertyStore);
 
-    // If the import failed, report it
+	// If the import failed, report it
 	if (pScene == NULL)
-    {
-        LOGERRORF( "%s", aiGetErrorString());
-        return false;
-    }
+	{
+		LOGERRORF( "%s", aiGetErrorString());
+		return false;
+	}
 
 	pModel->mSceneName = ExtractSceneNameFromFileName(filename);
 
