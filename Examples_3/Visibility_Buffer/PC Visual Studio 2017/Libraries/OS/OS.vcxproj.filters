@@ -34,9 +34,6 @@
     <Filter Include="Middleware_3">
       <UniqueIdentifier>{82184852-3572-465c-a526-5e3e19191e75}</UniqueIdentifier>
     </Filter>
-    <Filter Include="Middleware_3\Input">
-      <UniqueIdentifier>{2dcf919e-4d45-496b-99d5-8a3433f7c97d}</UniqueIdentifier>
-    </Filter>
     <Filter Include="Middleware_3\UI">
       <UniqueIdentifier>{67dcb179-77f7-4735-ba7a-9d47f2c86c55}</UniqueIdentifier>
     </Filter>
@@ -49,15 +46,27 @@
     <Filter Include="Utils">
       <UniqueIdentifier>{63ab29b7-c722-463b-98b3-6854c17c424e}</UniqueIdentifier>
     </Filter>
+    <Filter Include="OS\Input">
+      <UniqueIdentifier>{12705cd5-7862-4903-995a-a9f1700c6f7a}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="OS\Profiler">
+      <UniqueIdentifier>{5c34fb4b-91ae-4758-9092-8d5e5c718e91}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Dependencies\EASTL">
+      <UniqueIdentifier>{daee9ce9-77ed-4b1f-95d7-5939acfc21ea}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Dependencies\EASTL\EAStdC">
+      <UniqueIdentifier>{a0cc15cd-6446-41b5-922b-61d2903717de}</UniqueIdentifier>
+    </Filter>
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="..\..\..\..\..\Common_3\OS\Interfaces\IFileSystem.h">
       <Filter>OS\Interfaces</Filter>
     </ClInclude>
-    <ClInclude Include="..\..\..\..\..\Common_3\OS\Interfaces\ILogManager.h">
+    <ClInclude Include="..\..\..\..\..\Common_3\OS\Interfaces\ILog.h">
       <Filter>OS\Interfaces</Filter>
     </ClInclude>
-    <ClInclude Include="..\..\..\..\..\Common_3\OS\Interfaces\IMemoryManager.h">
+    <ClInclude Include="..\..\..\..\..\Common_3\OS\Interfaces\IMemory.h">
       <Filter>OS\Interfaces</Filter>
     </ClInclude>
     <ClInclude Include="..\..\..\..\..\Common_3\OS\Interfaces\IOperatingSystem.h">
@@ -69,7 +78,7 @@
     <ClInclude Include="..\..\..\..\..\Common_3\OS\Interfaces\IThread.h">
       <Filter>OS\Interfaces</Filter>
     </ClInclude>
-    <ClInclude Include="..\..\..\..\..\Common_3\OS\Logging\LogManager.h">
+    <ClInclude Include="..\..\..\..\..\Common_3\OS\Logging\Log.h">
       <Filter>OS\Logging</Filter>
     </ClInclude>
     <ClInclude Include="..\..\..\..\..\Common_3\OS\Image\Image.h">
@@ -78,7 +87,7 @@
     <ClInclude Include="..\..\..\..\..\Common_3\OS\Image\ImageEnums.h">
       <Filter>OS\Image</Filter>
     </ClInclude>
-    <ClInclude Include="..\..\..\..\..\Common_3\OS\Interfaces\ITimeManager.h">
+    <ClInclude Include="..\..\..\..\..\Common_3\OS\Interfaces\ITime.h">
       <Filter>OS\Interfaces</Filter>
     </ClInclude>
     <ClInclude Include="..\..\..\..\..\Common_3\OS\Interfaces\IPlatformEvents.h">
@@ -95,12 +104,6 @@
     </ClInclude>
     <ClInclude Include="..\..\..\..\..\Middleware_3\UI\AppUI.h">
       <Filter>Middleware_3\UI</Filter>
-    </ClInclude>
-    <ClInclude Include="..\..\..\..\..\Common_3\OS\Core\DebugRenderer.h">
-      <Filter>OS\Core</Filter>
-    </ClInclude>
-    <ClInclude Include="..\..\..\..\..\Middleware_3\Input\InputSystem.h">
-      <Filter>Middleware_3\Input</Filter>
     </ClInclude>
     <ClInclude Include="..\..\..\..\..\Middleware_3\Text\Fontstash.h">
       <Filter>Middleware_3\Text</Filter>
@@ -123,18 +126,45 @@
     <ClInclude Include="..\..\..\..\..\Common_3\ThirdParty\OpenSource\imgui\stb_truetype.h">
       <Filter>Middleware_3\UI\imgui</Filter>
     </ClInclude>
+    <ClInclude Include="..\..\..\..\..\Common_3\OS\Input\InputMappings.h">
+      <Filter>OS\Input</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\..\..\..\Common_3\OS\Input\InputSystem.h">
+      <Filter>OS\Input</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\..\..\..\Common_3\OS\Core\ThreadSystem.h">
+      <Filter>OS\Core</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\..\..\..\Common_3\ThirdParty\OpenSource\MicroProfile\ProfilerBase.h">
+      <Filter>OS\Profiler</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\..\..\..\Common_3\ThirdParty\OpenSource\MicroProfile\ProfilerEnableMacro.h">
+      <Filter>OS\Profiler</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\..\..\..\Common_3\ThirdParty\OpenSource\MicroProfile\ProfilerHTML.h">
+      <Filter>OS\Profiler</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\..\..\..\Common_3\ThirdParty\OpenSource\MicroProfile\ProfilerInput.h">
+      <Filter>OS\Profiler</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\..\..\..\Common_3\ThirdParty\OpenSource\MicroProfile\ProfilerUI.h">
+      <Filter>OS\Profiler</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\..\..\..\Common_3\OS\Interfaces\IProfiler.h">
+      <Filter>OS\Interfaces</Filter>
+    </ClInclude>
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="..\..\..\..\..\Common_3\OS\Windows\WindowsBase.cpp">
       <Filter>OS\Windows</Filter>
     </ClCompile>
-    <ClCompile Include="..\..\..\..\..\Common_3\OS\MemoryTracking\MemoryTrackingManager.cpp">
+    <ClCompile Include="..\..\..\..\..\Common_3\OS\MemoryTracking\MemoryTracking.cpp">
       <Filter>OS\MemoryTracking</Filter>
     </ClCompile>
-    <ClCompile Include="..\..\..\..\..\Common_3\OS\Logging\LogManager.cpp">
+    <ClCompile Include="..\..\..\..\..\Common_3\OS\Logging\Log.cpp">
       <Filter>OS\Logging</Filter>
     </ClCompile>
-    <ClCompile Include="..\..\..\..\..\Common_3\OS\Windows\WindowsLogManager.cpp">
+    <ClCompile Include="..\..\..\..\..\Common_3\OS\Windows\WindowsLog.cpp">
       <Filter>OS\Windows</Filter>
     </ClCompile>
     <ClCompile Include="..\..\..\..\..\Common_3\OS\Windows\WindowsFileSystem.cpp">
@@ -149,7 +179,7 @@
     <ClCompile Include="..\..\..\..\..\Common_3\OS\Core\Timer.cpp">
       <Filter>OS\Core</Filter>
     </ClCompile>
-    <ClCompile Include="..\..\..\..\..\Common_3\OS\Windows\WindowsThreadManager.cpp">
+    <ClCompile Include="..\..\..\..\..\Common_3\OS\Windows\WindowsThread.cpp">
       <Filter>OS\Windows</Filter>
     </ClCompile>
     <ClCompile Include="..\..\..\..\..\Common_3\OS\Core\ThreadSystem.cpp">
@@ -170,12 +200,6 @@
     <ClCompile Include="..\..\..\..\..\Middleware_3\UI\AppUI.cpp">
       <Filter>Middleware_3\UI</Filter>
     </ClCompile>
-    <ClCompile Include="..\..\..\..\..\Common_3\OS\Core\DebugRenderer.cpp">
-      <Filter>OS\Core</Filter>
-    </ClCompile>
-    <ClCompile Include="..\..\..\..\..\Middleware_3\Input\InputSystem.cpp">
-      <Filter>Middleware_3\Input</Filter>
-    </ClCompile>
     <ClCompile Include="..\..\..\..\..\Middleware_3\Text\Fontstash.cpp">
       <Filter>Middleware_3\Text</Filter>
     </ClCompile>
@@ -194,9 +218,66 @@
     <ClCompile Include="..\..\..\..\..\Common_3\ThirdParty\OpenSource\imgui\imgui_widgets.cpp">
       <Filter>Middleware_3\UI\imgui</Filter>
     </ClCompile>
+    <ClCompile Include="..\..\..\..\..\Common_3\OS\Input\InputSystem.cpp">
+      <Filter>OS\Input</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\..\..\..\Common_3\ThirdParty\OpenSource\MicroProfile\Profiler.cpp">
+      <Filter>OS\Profiler</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\..\..\..\Common_3\ThirdParty\OpenSource\MicroProfile\ProfilerBase.cpp">
+      <Filter>OS\Profiler</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\..\..\..\Common_3\ThirdParty\OpenSource\MicroProfile\ProfilerDraw.cpp">
+      <Filter>OS\Profiler</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\..\..\..\Common_3\ThirdParty\OpenSource\MicroProfile\ProfilerInput.cpp">
+      <Filter>OS\Profiler</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\..\..\..\Common_3\ThirdParty\OpenSource\MicroProfile\ProfilerUI.cpp">
+      <Filter>OS\Profiler</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\..\..\..\Common_3\ThirdParty\OpenSource\EASTL\allocator_eastl.cpp">
+      <Filter>Dependencies\EASTL</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\..\..\..\Common_3\ThirdParty\OpenSource\EASTL\allocator_forge.cpp">
+      <Filter>Dependencies\EASTL</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\..\..\..\Common_3\ThirdParty\OpenSource\EASTL\assert.cpp">
+      <Filter>Dependencies\EASTL</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\..\..\..\Common_3\ThirdParty\OpenSource\EASTL\fixed_pool.cpp">
+      <Filter>Dependencies\EASTL</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\..\..\..\Common_3\ThirdParty\OpenSource\EASTL\hashtable.cpp">
+      <Filter>Dependencies\EASTL</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\..\..\..\Common_3\ThirdParty\OpenSource\EASTL\intrusive_list.cpp">
+      <Filter>Dependencies\EASTL</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\..\..\..\Common_3\ThirdParty\OpenSource\EASTL\numeric_limits.cpp">
+      <Filter>Dependencies\EASTL</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\..\..\..\Common_3\ThirdParty\OpenSource\EASTL\red_black_tree.cpp">
+      <Filter>Dependencies\EASTL</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\..\..\..\Common_3\ThirdParty\OpenSource\EASTL\string.cpp">
+      <Filter>Dependencies\EASTL</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\..\..\..\Common_3\ThirdParty\OpenSource\EASTL\thread_support.cpp">
+      <Filter>Dependencies\EASTL</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\..\..\..\Common_3\ThirdParty\OpenSource\EASTL\EAStdC\EAMemory.cpp">
+      <Filter>Dependencies\EASTL\EAStdC</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\..\..\..\Common_3\ThirdParty\OpenSource\EASTL\EAStdC\EASprintf.cpp">
+      <Filter>Dependencies\EASTL\EAStdC</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\..\..\..\Common_3\OS\Windows\WindowsTime.cpp">
+      <Filter>OS\Windows</Filter>
+    </ClCompile>
   </ItemGroup>
   <ItemGroup>
-    <Natvis Include="..\..\..\..\..\Common_3\ThirdParty\OpenSource\TinySTL\tinystl.natvis">
+    <Natvis Include="..\..\..\..\..\Common_3\ThirdParty\OpenSource\EASTL\EASTL.natvis">
       <Filter>Utils</Filter>
     </Natvis>
   </ItemGroup>

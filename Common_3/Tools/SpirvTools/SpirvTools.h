@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2018 Confetti Interactive Inc.
+ * Copyright (c) 2018-2019 Confetti Interactive Inc.
  *
  * This file is part of The-Forge
  * (see https://github.com/ConfettiFX/The-Forge).
@@ -90,7 +90,24 @@ enum SPIRV_Resource_Type
    SPIRV_TYPE_SUBPASS_INPUTS,
    SPIRV_TYPE_UNIFORM_TEXEL_BUFFERS,
    SPIRV_TYPE_STORAGE_TEXEL_BUFFERS,
+   SPIRV_TYPE_ACCELERATION_STRUCTURES,
    SPIRV_TYPE_COUNT
+};
+
+enum SPIRV_Resource_Dim
+{
+	SPIRV_DIM_UNDEFINED = 0,
+	SPIRV_DIM_BUFFER = 1,
+	SPIRV_DIM_TEXTURE1D = 2,
+	SPIRV_DIM_TEXTURE1DARRAY = 3,
+	SPIRV_DIM_TEXTURE2D = 4,
+	SPIRV_DIM_TEXTURE2DARRAY = 5,
+	SPIRV_DIM_TEXTURE2DMS = 6,
+	SPIRV_DIM_TEXTURE2DMSARRAY = 7,
+	SPIRV_DIM_TEXTURE3D = 8,
+	SPIRV_DIM_TEXTURECUBE = 9,
+	SPIRV_DIM_TEXTURECUBEARRAY = 10,
+	SPIRV_DIM_COUNT = 11,
 };
 
 struct SPIRV_Resource
@@ -100,6 +117,9 @@ struct SPIRV_Resource
 
    // resource Type
    SPIRV_Resource_Type type;
+
+   // Texture dimension. Undefined if not a texture.
+   SPIRV_Resource_Dim dim;
 
    // If the resouce was used in the shader
    bool is_used;

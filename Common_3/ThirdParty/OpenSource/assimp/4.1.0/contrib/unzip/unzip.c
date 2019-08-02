@@ -41,6 +41,10 @@ woven in by Terry Thorsen 1/2003.
 #include "zlib.h"
 #include "unzip.h"
 
+#if ZLIB_VERNUM < 0x1270
+typedef unsigned long z_crc_t;
+#endif
+
 #ifdef STDC
 #  include <stddef.h>
 #  include <string.h>
@@ -52,6 +56,8 @@ woven in by Terry Thorsen 1/2003.
 #   include <errno.h>
 #endif
 
+extern void* conf_malloc(size_t);
+extern void  conf_free(void*);
 
 #ifndef local
 #  define local static
@@ -75,10 +81,10 @@ woven in by Terry Thorsen 1/2003.
 #endif
 
 #ifndef ALLOC
-# define ALLOC(size) (malloc(size))
+# define ALLOC(size) (conf_malloc(size))
 #endif
 #ifndef TRYFREE
-# define TRYFREE(p) {if (p) free(p);}
+# define TRYFREE(p) {if (p) conf_free(p);}
 #endif
 
 #define SIZECENTRALDIRITEM (0x2e)
@@ -1547,7 +1553,7 @@ extern int ZEXPORT unzGetGlobalComment (file, szComment, uSizeBuf)
     char *szComment;
     uLong uSizeBuf;
 {
-    int err=UNZ_OK;
+    //int err=UNZ_OK;
     unz_s* s;
     uLong uReadThis ;
     if (file==NULL)

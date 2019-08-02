@@ -1,8 +1,8 @@
 // ---------------------------------------------------------------------------------------------------------------------------------
 //                                                      
 //                                                      
-//  _ __ ___  _ __ ___   __ _ _ __      ___ _ __  _ __  
-// | '_ ` _ \| '_ ` _ \ / _` | '__|    / __| '_ \| '_ \ 
+//  _ __ ___  _ __ ___   __ _ _ __      ___ _ __  _ ___  
+// | '_ ` _ \| '_ ` _ \ / _` | '__|    / __| '_ \| '_  |
 // | | | | | | | | | | | (_| | |    _ | (__| |_) | |_) |
 // |_| |_| |_|_| |_| |_|\__, |_|   (_) \___| .__/| .__/ 
 //                       __/ |             | |   | |    
@@ -85,6 +85,7 @@
 #include <stdarg.h>
 #include <new>
 #include "../../../../OS/Interfaces/IOperatingSystem.h"
+#include "../../../../OS/Interfaces/IFileSystem.h"
 
 #if !defined(WIN32) && !defined(DURANGO)
 #include <unistd.h>
@@ -166,6 +167,8 @@ static		bool		alwaysWipeAll = true;
 static		bool		cleanupLogOnFirstRun = true;
 static	const	unsigned int	paddingSize = 4;
 #endif
+//used to avoid tracking memory allocations done from DumpLeakReports.
+static		bool		overrideTracking = false;
 
 // ---------------------------------------------------------------------------------------------------------------------------------
 // We define our own assert, because we don't want to bring up an assertion dialog, since that allocates RAM. Our new assert
@@ -189,6 +192,15 @@ extern void debugger(const char *message);
 #endif
 #else	// Linux uses assert, which we can use safely, since it doesn't bring up a dialog within the program.
 #define	m_assert(cond) assert(cond)
+#define sprintf_s sprintf
+#define _unlink unlink
+#define localtime_s localtime_r
+#define fopen_s(file,filename,mode) ((*file)=fopen(filename,mode))
+#ifdef __APPLE__
+#define strcpy_s(destination,size,source) strlcpy(destination,source,size)
+#else
+#define strcpy_s(destination,size,source) strcpy(destination,source)
+#endif
 #endif
 
 // ---------------------------------------------------------------------------------------------------------------------------------
@@ -202,20 +214,6 @@ extern void debugger(const char *message);
 #undef	calloc
 #undef	realloc
 #undef	free
-
-// ---------------------------------------------------------------------------------------------------------------------------------
-// Defaults for the constants & statics in the MemoryManager class
-// ---------------------------------------------------------------------------------------------------------------------------------
-
-const		unsigned int	m_alloc_unknown = 0;
-const		unsigned int	m_alloc_new = 1;
-const		unsigned int	m_alloc_new_array = 2;
-const		unsigned int	m_alloc_malloc = 3;
-const		unsigned int	m_alloc_calloc = 4;
-const		unsigned int	m_alloc_realloc = 5;
-const		unsigned int	m_alloc_delete = 6;
-const		unsigned int	m_alloc_delete_array = 7;
-const		unsigned int	m_alloc_free = 8;
 
 // ---------------------------------------------------------------------------------------------------------------------------------
 // -DOC- Get to know these values. They represent the values that will be used to fill unused and deallocated RAM.
@@ -232,7 +230,7 @@ static		unsigned int	releasedPattern = 0xdeadbeef; // Fill pattern for deallocat
 
 static	const	unsigned int	hashSize = 1 << hashBits;
 static	const	char		*allocationTypes[] = { "Unknown",
-"new",     "new[]",  "malloc",   "calloc",
+"new",     "new[]",  "malloc",   "calloc", "memalign",
 "realloc", "delete", "delete[]", "free" };
 static		sAllocUnit	*hashTable[hashSize];
 static		sAllocUnit	*reservoir;
@@ -261,16 +259,12 @@ char* LogToMemory(char* log);
 // 3. Define MUTEX_UNLOCK to call the unlock function of the mutex.
 // 4. Add the mutex initialization function inside CreateMutex() on the bottom of this file.
 // 5. Add the mutex destruction function inside RemoveMutex() on the bottom of this file. (Currently not used)
-#ifdef WIN32
-typedef CRITICAL_SECTION MUTEX;
-#define MUTEX_LOCK(MUTEX) if (!MUTEX) {MUTEX = CreateMutex();} EnterCriticalSection(MUTEX);
-#define MUTEX_UNLOCK(MUTEX) LeaveCriticalSection(MUTEX);
-#else
-// Mutex definition in other OSes or single thread programs
-typedef void MUTEX;
-#define MUTEX_LOCK(MUTEX) ;
-#define MUTEX_UNLOCK(MUTEX) ;
-#endif
+
+#include "../../../../OS/Interfaces/IThread.h"
+
+typedef Mutex MUTEX;
+#define MUTEX_LOCK(mutex) if (!mutex) {mutex = CreateMutex();} mutex->Acquire();
+#define MUTEX_UNLOCK(mutex) mutex->Release();
 
 MUTEX* allocMutex;
 MUTEX* logMutex;
@@ -294,10 +288,11 @@ static	char*	log(const char *format, ...)
 	/*logMutex->lock();*/
 	MUTEX_LOCK(logMutex);
 
-	static char buffer[2048];
+	static const uint32_t BUFFER_SIZE = 2048;
+	static char buffer[BUFFER_SIZE];
 	va_list	ap;
 	va_start(ap, format);
-	vsprintf_s(buffer, format, ap);
+	vsprintf_s(buffer, BUFFER_SIZE, format, ap);
 	va_end(ap);
 
 	// Open the log file
@@ -319,7 +314,7 @@ static	char*	log(const char *format, ...)
 	//fprintf(fp, "%s\r\n", buffer);
 	//fclose(fp);
 
-	sprintf_s(buffer, "%s\r\n", buffer);
+	sprintf_s(buffer, "%s\n", buffer);
 	// Quicker
 
 	char* logAddress = LogToMemory(buffer);
@@ -342,10 +337,13 @@ static	void	doCleanupLogOnFirstRun()
 
 		time_t	t = time(NULL);
 		tm localt;
+#ifdef _WIN32
 		localtime_s(&localt, &t);
+#else
+		localtime_s(&t, &localt);
+#endif
 		char asciiTime[64];
 		// use strftime instead of asctime so we don't get the trailing newline. (We're writing the
-		// file in binary so we need to explicitly make all newlines "\r\n".)
 		strftime(asciiTime, 64, "%c", &localt);
 		log("--------------------------------------------------------------------------------");
 		log("");
@@ -429,7 +427,7 @@ static	const char	*insertCommas(unsigned int value)
 
 // ---------------------------------------------------------------------------------------------------------------------------------
 
-static	const char	*memorySizeString(unsigned long size)
+static	const char	*memorySizeString(uint32_t size)
 {
 	static	char	str[90];
 	if (size > (1024 * 1024))	sprintf_s(str, "%10s (%7.2fM)", insertCommas(size), static_cast<float>(size) / (1024.0f * 1024.0f));
@@ -462,42 +460,44 @@ static	sAllocUnit	*findAllocUnit(const void *reportedAddress)
 
 // ---------------------------------------------------------------------------------------------------------------------------------
 
-static	size_t	calculateActualSize(const size_t reportedSize)
+static	size_t	calculateActualSize(const size_t reportedSize, const size_t alignment)
 {
-	// We use DWORDS as our padding, and a long is guaranteed to be 4 bytes, but an int is not (ANSI defines an int as
+	// We use DWORDS as our padding, and a uint32_t is guaranteed to be 4 bytes, but an int is not (ANSI defines an int as
 	// being the standard word size for a processor; on a 32-bit machine, that's 4 bytes, but on a 64-bit machine, it's
-	// 8 bytes, which means an int can actually be larger than a long.)
+	// 8 bytes, which means an int can actually be larger than a uint32_t.)
 
-	return reportedSize + paddingSize * sizeof(long) * 2;
+	return reportedSize + paddingSize * sizeof(uint32_t) * 2 + alignment;
 }
 
 // ---------------------------------------------------------------------------------------------------------------------------------
 
-static	size_t	calculateReportedSize(const size_t actualSize)
+static	size_t	calculateReportedSize(const size_t actualSize, const size_t alignment)
 {
-	// We use DWORDS as our padding, and a long is guaranteed to be 4 bytes, but an int is not (ANSI defines an int as
+	// We use DWORDS as our padding, and a uint32_t is guaranteed to be 4 bytes, but an int is not (ANSI defines an int as
 	// being the standard word size for a processor; on a 32-bit machine, that's 4 bytes, but on a 64-bit machine, it's
-	// 8 bytes, which means an int can actually be larger than a long.)
+	// 8 bytes, which means an int can actually be larger than a uint32_t.)
 
-	return actualSize - paddingSize * sizeof(long) * 2;
+	return actualSize - alignment - paddingSize * sizeof(uint32_t) * 2;
 }
 
 // ---------------------------------------------------------------------------------------------------------------------------------
 
-static	void	*calculateReportedAddress(const void *actualAddress)
+static	void	*calculateReportedAddress(const void *actualAddress, const size_t alignment)
 {
 	// We allow this...
 
 	if (!actualAddress) return NULL;
 
 	// JUst account for the padding
-
-	return reinterpret_cast<void *>(const_cast<char *>(reinterpret_cast<const char *>(actualAddress) + sizeof(long) * paddingSize));
+	const char* ptr = reinterpret_cast<const char*>(actualAddress) + sizeof(uint32_t) * paddingSize + alignment;
+	assert((alignment & (alignment - 1)) == 0);
+	size_t mask = ~(alignment ? alignment - 1 : (size_t) 0u);
+	return reinterpret_cast<void*>(reinterpret_cast<char*>(((size_t)ptr) & mask));
 }
 
 // ---------------------------------------------------------------------------------------------------------------------------------
 
-static	void	wipeWithPattern(sAllocUnit *allocUnit, unsigned long pattern, const unsigned int originalReportedSize = 0)
+static	void	wipeWithPattern(sAllocUnit *allocUnit, uint32_t pattern, const unsigned int originalReportedSize = 0)
 {
 	// For a serious test run, we use wipes of random a random value. However, if this causes a crash, we don't want it to
 	// crash in a differnt place each time, so we specifically DO NOT call srand. If, by chance your program calls srand(),
@@ -522,7 +522,7 @@ static	void	wipeWithPattern(sAllocUnit *allocUnit, unsigned long pattern, const 
 	{
 		// Fill the bulk
 
-		long	*lptr = reinterpret_cast<long *>(reinterpret_cast<char *>(allocUnit->reportedAddress) + originalReportedSize);
+		uint32_t	*lptr = reinterpret_cast<uint32_t *>(reinterpret_cast<char *>(allocUnit->reportedAddress) + originalReportedSize);
 		int	length = static_cast<int>(allocUnit->reportedSize - originalReportedSize);
 		int	i;
 		for (i = 0; i < (length >> 2); i++, lptr++)
@@ -542,8 +542,8 @@ static	void	wipeWithPattern(sAllocUnit *allocUnit, unsigned long pattern, const 
 
 	// Write in the prefix/postfix bytes
 
-	long		*pre = reinterpret_cast<long *>(allocUnit->actualAddress);
-	long		*post = reinterpret_cast<long *>(reinterpret_cast<char *>(allocUnit->actualAddress) + allocUnit->actualSize - paddingSize * sizeof(long));
+	uint32_t	*pre = reinterpret_cast<uint32_t *>(reinterpret_cast<char *>(allocUnit->reportedAddress) - paddingSize * sizeof(uint32_t));
+	uint32_t	*post = reinterpret_cast<uint32_t *>(reinterpret_cast<char *>(allocUnit->reportedAddress) + allocUnit->reportedSize);
 	for (unsigned int i = 0; i < paddingSize; i++, pre++, post++)
 	{
 		*pre = prefixPattern;
@@ -553,19 +553,19 @@ static	void	wipeWithPattern(sAllocUnit *allocUnit, unsigned long pattern, const 
 
 // ---------------------------------------------------------------------------------------------------------------------------------
 
-static	void	dumpAllocations(FILE *fp)
+static	void	dumpAllocations(File& fileToWrite)
 {
-	fprintf(fp, "Alloc.        Addr           Size           Addr           Size                        BreakOn BreakOn\r\n");
-	fprintf(fp, "Number      Reported       Reported        Actual         Actual     Unused    Method  Dealloc Realloc  Allocated by\r\n");
-	fprintf(fp, "------ ------------------ ---------- ------------------ ---------- ---------- -------- ------- ------- ---------------------------------------------------\r\n");
-
+	fileToWrite.WriteLine("Alloc.        Addr           Size           Addr           Size                        BreakOn BreakOn");
+	fileToWrite.WriteLine("Number      Reported       Reported        Actual         Actual     Unused    Method  Dealloc Realloc  Allocated by");
+	fileToWrite.WriteLine("------ ------------------ ---------- ------------------ ---------- ---------- -------- ------- ------- ---------------------------------------------------");
+	eastl::string toPrint;
 
 	for (unsigned int i = 0; i < hashSize; i++)
 	{
 		sAllocUnit *ptr = hashTable[i];
 		while (ptr)
 		{
-			fprintf(fp, "% 6d 0x%016zX 0x%08zX 0x%016zX 0x%08zX 0x%08X %-8s    %c       %c    %s\r\n",
+			toPrint = toPrint.sprintf("% 6d 0x%016zX 0x%08zX 0x%016zX 0x%08zX 0x%08X %-8s    %c       %c    %s",
 				ptr->allocationNumber,
 				reinterpret_cast<size_t>(ptr->reportedAddress), ptr->reportedSize,
 				reinterpret_cast<size_t>(ptr->actualAddress), ptr->actualSize,
@@ -574,6 +574,7 @@ static	void	dumpAllocations(FILE *fp)
 				ptr->breakOnDealloc ? 'Y' : 'N',
 				ptr->breakOnRealloc ? 'Y' : 'N',
 				ownerString(ptr->sourceFile, ptr->sourceLine, ptr->sourceFunc));
+			fileToWrite.WriteLine(toPrint);
 			ptr = ptr->next;
 		}
 	}
@@ -583,63 +584,70 @@ static	void	dumpAllocations(FILE *fp)
 
 static	void	dumpLeakReport()
 {
-	// Open the report file
-
-	FILE	*fp = NULL;
-	fopen_s(&fp, memoryLeakLogFile, "w+b");
-
-	// If you hit this assert, then the memory report generator is unable to log information to a file (can't open the file for
-	// some reason.)
-	m_assert(fp);
-	if (!fp) return;
-
-	// Any leaks?
-
-	// Header
-
-	static  char    timeString[25];
-	memset(timeString, 0, sizeof(timeString));
-	time_t  t = time(NULL);
-	struct tm tme;
-	localtime_s(&tme, &t);
-	fprintf(fp, " ------------------------------------------------------------------------------\r\n");
-	fprintf(fp, "|                Memory leak report for:  %02d/%02d/%04d %02d:%02d:%02d                  |\r\n", tme.tm_mon + 1, tme.tm_mday, tme.tm_year + 1900, tme.tm_hour, tme.tm_min, tme.tm_sec);
-	fprintf(fp, " ------------------------------------------------------------------------------\r\n");
-	fprintf(fp, "\r\n");
-	if (stats.totalAllocUnitCount)
+	overrideTracking = true;
 	{
-		fprintf(fp, "%d memory leak%s found:\r\n", stats.totalAllocUnitCount, stats.totalAllocUnitCount == 1 ? "" : "s");
-	}
-	else
-	{
-		fprintf(fp, "Congratulations! No memory leaks found!\r\n");
+		// Open the report file
+		eastl::string exeFileName = FileSystem::GetProgramFileName();
+		//Minimum Length check
+		if (exeFileName.size() < 2)
+			exeFileName = "MemLeaks";
 
-		// We can finally free up our own memory allocations
+		File toOpen;
+		toOpen.Open(FileSystem::GetCurrentDir() + exeFileName + ".memleaks", FileMode::FM_WriteBinary, FSRoot::FSR_Absolute);
+		if (!toOpen.IsOpen())
+			return;
 
-		if (reservoirBuffer)
+		// Header
+		eastl::string outputLine = "";
+		static  char    timeString[25];
+		memset(timeString, 0, sizeof(timeString));
+		time_t  t = time(NULL);
+		struct tm tme;
+#ifdef _WIN32
+		localtime_s(&tme, &t);
+#else
+		localtime_s(&t, &tme);
+#endif
+		toOpen.WriteLine(" ------------------------------------------------------------------------------");
+		outputLine = outputLine.sprintf("|                Memory leak report for:  %02d/%02d/%04d %02d:%02d:%02d                  |", tme.tm_mon + 1, tme.tm_mday, tme.tm_year + 1900, tme.tm_hour, tme.tm_min, tme.tm_sec);
+		toOpen.WriteLine(outputLine);
+		// use LF instead of CRLF
+		toOpen.WriteLine(" ------------------------------------------------------------------------------");
+		if (stats.totalAllocUnitCount)
 		{
-			for (unsigned int i = 0; i < reservoirBufferSize; i++)
-			{
-				free(reservoirBuffer[i]);
-			}
-			free(reservoirBuffer);
-			reservoirBuffer = 0;
-			reservoirBufferSize = 0;
-			reservoir = NULL;
+				outputLine = outputLine.sprintf("%d memory leak%s found:\n", stats.totalAllocUnitCount, stats.totalAllocUnitCount == 1 ? "" : "s");
+				toOpen.WriteLine(outputLine);
 		}
+		else
+		{
+				toOpen.WriteLine("Congratulations! No memory leaks found!");
+
+			// We can finally free up our own memory allocations
+
+			if (reservoirBuffer)
+			{
+				for (unsigned int i = 0; i < reservoirBufferSize; i++)
+				{
+					free(reservoirBuffer[i]);
+				}
+				free(reservoirBuffer);
+				reservoirBuffer = 0;
+				reservoirBufferSize = 0;
+				reservoir = NULL;
+			}
+		}
+
+		if (stats.totalAllocUnitCount)
+		{
+			dumpAllocations(toOpen);
+		}
+
+		char* allMemoryLog = log("----All Allocations and Deallocations----");
+
+		toOpen.WriteLine(allMemoryLog);
+		toOpen.Close();
 	}
-	fprintf(fp, "\r\n");
-
-	if (stats.totalAllocUnitCount)
-	{
-		dumpAllocations(fp);
-	}
-
-	char* allMemoryLog = log("----All Allocations and Deallocations----");
-
-	fprintf(fp, allMemoryLog);
-
-	fclose(fp);
+	overrideTracking = false;
 }
 
 // ---------------------------------------------------------------------------------------------------------------------------------
@@ -650,7 +658,7 @@ class	MemStaticTimeTracker
 {
 public:
 	MemStaticTimeTracker() { doCleanupLogOnFirstRun(); }
-	~MemStaticTimeTracker() { staticDeinitTime = true; dumpLeakReport(); }
+	~MemStaticTimeTracker() { staticDeinitTime = true; dumpLeakReport();}
 };
 static	MemStaticTimeTracker	mstt;
 
@@ -812,8 +820,10 @@ static	void	resetGlobals()
 // Allocate memory and track it
 // ---------------------------------------------------------------------------------------------------------------------------------
 
-void	*m_allocator(const char *sourceFile, const unsigned int sourceLine, const char *sourceFunc, const unsigned int allocationType, const size_t reportedSize)
+void	*m_allocator(const char *sourceFile, const unsigned int sourceLine, const char *sourceFunc, const unsigned int allocationType, const size_t alignment, const size_t reportedSize)
 {
+	if (overrideTracking)
+		return malloc(reportedSize);
 
 	//if (!allocMutex)
 	//	allocMutex = CreateMutex();
@@ -887,7 +897,7 @@ void	*m_allocator(const char *sourceFile, const unsigned int sourceLine, const c
 		// Populate it with some real data
 
 		memset(au, 0, sizeof(sAllocUnit));
-		au->actualSize = calculateActualSize(reportedSize);
+		au->actualSize = calculateActualSize(reportedSize, alignment);
 #ifdef RANDOM_FAILURE
 		double	a = rand();
 		double	b = RAND_MAX / 100.0 * RANDOM_FAILURE;
@@ -904,7 +914,7 @@ void	*m_allocator(const char *sourceFile, const unsigned int sourceLine, const c
 		au->actualAddress = malloc(au->actualSize);
 #endif
 		au->reportedSize = reportedSize;
-		au->reportedAddress = calculateReportedAddress(au->actualAddress);
+		au->reportedAddress = calculateReportedAddress(au->actualAddress, alignment);
 		au->allocationType = allocationType;
 		au->sourceLine = sourceLine;
 		au->allocationNumber = currentAllocationCount;
@@ -1023,7 +1033,7 @@ void	*m_reallocator(const char *sourceFile, const unsigned int sourceLine, const
 		if (!reportedAddress)
 		{
 			MUTEX_UNLOCK(allocMutex);
-			return m_allocator(sourceFile, sourceLine, sourceFunc, reallocationType, reportedSize);
+			return m_allocator(sourceFile, sourceLine, sourceFunc, reallocationType, 0, reportedSize);
 		}
 
 		// Increase our allocation count
@@ -1077,7 +1087,7 @@ void	*m_reallocator(const char *sourceFile, const unsigned int sourceLine, const
 		// Do the reallocation
 
 		void	*oldReportedAddress = reportedAddress;
-		size_t	newActualSize = calculateActualSize(reportedSize);
+		size_t	newActualSize = calculateActualSize(reportedSize, 0);
 		void	*newActualAddress = NULL;
 #ifdef RANDOM_FAILURE
 		double	a = rand();
@@ -1118,8 +1128,8 @@ void	*m_reallocator(const char *sourceFile, const unsigned int sourceLine, const
 
 		au->actualSize = newActualSize;
 		au->actualAddress = newActualAddress;
-		au->reportedSize = calculateReportedSize(newActualSize);
-		au->reportedAddress = calculateReportedAddress(newActualAddress);
+		au->reportedSize = calculateReportedSize(newActualSize, 0);
+		au->reportedAddress = calculateReportedAddress(newActualAddress, 0);
 		au->allocationType = reallocationType;
 		au->sourceLine = sourceLine;
 		au->allocationNumber = currentAllocationCount;
@@ -1222,6 +1232,12 @@ void	*m_reallocator(const char *sourceFile, const unsigned int sourceLine, const
 
 void	m_deallocator(const char *sourceFile, const unsigned int sourceLine, const char *sourceFunc, const unsigned int deallocationType, const void *reportedAddress)
 {
+	//used to avoid tracking memory allocations done from DumpLeakReports.
+	if (overrideTracking)
+	{
+		free((void*)reportedAddress);
+		return;
+	}
 	/*if (!allocMutex)
 	allocMutex = CreateMutex();
 
@@ -1270,6 +1286,7 @@ void	m_deallocator(const char *sourceFile, const unsigned int sourceLine, const 
 				(deallocationType == m_alloc_free         && au->allocationType == m_alloc_malloc) ||
 				(deallocationType == m_alloc_free         && au->allocationType == m_alloc_calloc) ||
 				(deallocationType == m_alloc_free         && au->allocationType == m_alloc_realloc) ||
+				(deallocationType == m_alloc_free         && au->allocationType == m_alloc_memalign) ||
 				(deallocationType == m_alloc_unknown));
 
 			// If you hit this assert, then the "break on dealloc" flag for this allocation unit is set. Interrogate the 'au'
@@ -1356,12 +1373,12 @@ bool	m_validateAllocUnit(const sAllocUnit *allocUnit)
 {
 	// Make sure the padding is untouched
 
-	long	*pre = reinterpret_cast<long *>(allocUnit->actualAddress);
-	long	*post = reinterpret_cast<long *>((char *)allocUnit->actualAddress + allocUnit->actualSize - paddingSize * sizeof(long));
+	uint32_t	*pre = reinterpret_cast<uint32_t *>(reinterpret_cast<char *>(allocUnit->reportedAddress) - paddingSize * sizeof(uint32_t));
+	uint32_t	*post = reinterpret_cast<uint32_t *>(reinterpret_cast<char *>(allocUnit->reportedAddress) + allocUnit->reportedSize);
 	bool	errorFlag = false;
 	for (unsigned int i = 0; i < paddingSize; i++, pre++, post++)
 	{
-		if (*pre != (long)prefixPattern)
+		if (*pre != (uint32_t)prefixPattern)
 		{
 			log("[!] A memory allocation unit was corrupt because of an underrun:");
 			m_dumpAllocUnit(allocUnit, "  ");
@@ -1371,9 +1388,9 @@ bool	m_validateAllocUnit(const sAllocUnit *allocUnit)
 		// If you hit this assert, then you should know that this allocation unit has been damaged. Something (possibly the
 		// owner?) has underrun the allocation unit (modified a few bytes prior to the start). You can interrogate the
 		// variable 'allocUnit' to see statistics and information about this damaged allocation unit.
-		m_assert(*pre == static_cast<long>(prefixPattern));
+		m_assert(*pre == static_cast<uint32_t>(prefixPattern));
 
-		if (*post != static_cast<long>(postfixPattern))
+		if (*post != static_cast<uint32_t>(postfixPattern))
 		{
 			log("[!] A memory allocation unit was corrupt because of an overrun:");
 			m_dumpAllocUnit(allocUnit, "  ");
@@ -1383,7 +1400,7 @@ bool	m_validateAllocUnit(const sAllocUnit *allocUnit)
 		// If you hit this assert, then you should know that this allocation unit has been damaged. Something (possibly the
 		// owner?) has overrun the allocation unit (modified a few bytes after the end). You can interrogate the variable
 		// 'allocUnit' to see statistics and information about this damaged allocation unit.
-		m_assert(*post == static_cast<long>(postfixPattern));
+		m_assert(*post == static_cast<uint32_t>(postfixPattern));
 	}
 
 	// Return the error status (we invert it, because a return of 'false' means error)
@@ -1444,12 +1461,12 @@ bool	m_validateAllAllocUnits()
 
 unsigned int	m_calcUnused(const sAllocUnit *allocUnit)
 {
-	const unsigned long	*ptr = reinterpret_cast<const unsigned long *>(allocUnit->reportedAddress);
+	const uint32_t	*ptr = reinterpret_cast<const uint32_t *>(allocUnit->reportedAddress);
 	unsigned int		count = 0;
 
-	for (unsigned int i = 0; i < allocUnit->reportedSize; i += sizeof(long), ptr++)
+	for (unsigned int i = 0; i < allocUnit->reportedSize; i += sizeof(uint32_t), ptr++)
 	{
-		if (*ptr == unusedPattern) count += sizeof(long);
+		if (*ptr == unusedPattern) count += sizeof(uint32_t);
 	}
 
 	return count;
@@ -1494,69 +1511,73 @@ void	m_dumpAllocUnit(const sAllocUnit *allocUnit, const char *prefix)
 
 void	m_dumpMemoryReport(const char *filename, const bool overwrite)
 {
-	// Open the report file
+	overrideTracking = true;
+	{
+		File toOpen;
 
-	FILE	*fp = NULL;
+		if (overwrite) { toOpen.Open(filename, FileMode::FM_WriteBinary, FSRoot::FSR_Absolute); }
+		else { toOpen.Open(filename, (FileMode)(FileMode::FM_Append | FileMode::FM_Binary), FSRoot::FSR_Absolute); }
 
-	if (overwrite) { fopen_s(&fp, filename, "w+b"); }
-	else { fopen_s(&fp, filename, "ab"); }
+		// If you hit this assert, then the memory report generator is unable to log information to a file (can't open the file for
+		// some reason.)
+		if (!toOpen.IsOpen())
+			return;
 
-	// If you hit this assert, then the memory report generator is unable to log information to a file (can't open the file for
-	// some reason.)
-	m_assert(fp);
-	if (!fp) return;
-
-	// Header
-
-	static  char    timeString[25];
-	memset(timeString, 0, sizeof(timeString));
-	time_t  t = time(NULL);
-	struct  tm tme;
-	localtime_s(&tme, &t);
-	fprintf(fp, " ---------------------------------------------------------------------------------------------------------------------------------- \r\n");
-	fprintf(fp, "|                                             Memory report for: %02d/%02d/%04d %02d:%02d:%02d                                               |\r\n", tme.tm_mon + 1, tme.tm_mday, tme.tm_year + 1900, tme.tm_hour, tme.tm_min, tme.tm_sec);
-	fprintf(fp, " ---------------------------------------------------------------------------------------------------------------------------------- \r\n");
-	fprintf(fp, "\r\n");
-	fprintf(fp, "\r\n");
+		// Header
+		static  char    timeString[25];
+		memset(timeString, 0, sizeof(timeString));
+		time_t  t = time(NULL);
+		struct  tm tme;
+#ifdef _WIN32
+		localtime_s(&tme, &t);
+#else
+		localtime_s(&t, &tme);
+#endif
+		eastl::string line = "";
+		
+		toOpen.WriteLine(" ----------------------------------------------------------------------------------------------------------------------------------");
+		toOpen.WriteLine(line.sprintf("|                                             Memory report for: %02d/%02d/%04d %02d:%02d:%02d                                          |", tme.tm_mon + 1, tme.tm_mday, tme.tm_year + 1900, tme.tm_hour, tme.tm_min, tme.tm_sec));
+		toOpen.WriteLine(" ----------------------------------------------------------------------------------------------------------------------------------");
+		toOpen.WriteLine("");
 
 	// Report summary
+		toOpen.WriteLine(" ---------------------------------------------------------------------------------------------------------------------------------- ");
+		toOpen.WriteLine("|                                                           T O T A L S                                                            |");
+		toOpen.WriteLine(" ---------------------------------------------------------------------------------------------------------------------------------- ");
+		toOpen.WriteLine(line.sprintf("              Allocation unit count: %10s", insertCommas(stats.totalAllocUnitCount)));
+		toOpen.WriteLine(line.sprintf("            Reported to application: %s", memorySizeString(stats.totalReportedMemory)));
+		toOpen.WriteLine(line.sprintf("         Actual total memory in use: %s", memorySizeString(stats.totalActualMemory)));
+		toOpen.WriteLine(line.sprintf("           Memory tracking overhead: %s", memorySizeString(stats.totalActualMemory - stats.totalReportedMemory)));
+		toOpen.WriteLine("");
 
-	fprintf(fp, " ---------------------------------------------------------------------------------------------------------------------------------- \r\n");
-	fprintf(fp, "|                                                           T O T A L S                                                            |\r\n");
-	fprintf(fp, " ---------------------------------------------------------------------------------------------------------------------------------- \r\n");
-	fprintf(fp, "              Allocation unit count: %10s\r\n", insertCommas(stats.totalAllocUnitCount));
-	fprintf(fp, "            Reported to application: %s\r\n", memorySizeString(stats.totalReportedMemory));
-	fprintf(fp, "         Actual total memory in use: %s\r\n", memorySizeString(stats.totalActualMemory));
-	fprintf(fp, "           Memory tracking overhead: %s\r\n", memorySizeString(stats.totalActualMemory - stats.totalReportedMemory));
-	fprintf(fp, "\r\n");
+		toOpen.WriteLine(" ---------------------------------------------------------------------------------------------------------------------------------- ");
+		toOpen.WriteLine("|                                                            P E A K S                                                             |");
+		toOpen.WriteLine(" ---------------------------------------------------------------------------------------------------------------------------------- ");
+		toOpen.WriteLine(line.sprintf("              Allocation unit count: %10s", insertCommas(stats.peakAllocUnitCount)));
+		toOpen.WriteLine(line.sprintf("            Reported to application: %s", memorySizeString(stats.peakReportedMemory)));
+		toOpen.WriteLine(line.sprintf("                             Actual: %s", memorySizeString(stats.peakActualMemory)));
+		toOpen.WriteLine(line.sprintf("           Memory tracking overhead: %s", memorySizeString(stats.peakActualMemory - stats.peakReportedMemory)));
+		toOpen.WriteLine("");
 
-	fprintf(fp, " ---------------------------------------------------------------------------------------------------------------------------------- \r\n");
-	fprintf(fp, "|                                                            P E A K S                                                             |\r\n");
-	fprintf(fp, " ---------------------------------------------------------------------------------------------------------------------------------- \r\n");
-	fprintf(fp, "              Allocation unit count: %10s\r\n", insertCommas(stats.peakAllocUnitCount));
-	fprintf(fp, "            Reported to application: %s\r\n", memorySizeString(stats.peakReportedMemory));
-	fprintf(fp, "                             Actual: %s\r\n", memorySizeString(stats.peakActualMemory));
-	fprintf(fp, "           Memory tracking overhead: %s\r\n", memorySizeString(stats.peakActualMemory - stats.peakReportedMemory));
-	fprintf(fp, "\r\n");
+		toOpen.WriteLine(" ---------------------------------------------------------------------------------------------------------------------------------- ");
+		toOpen.WriteLine("|                                                      A C C U M U L A T E D                                                       |");
+		toOpen.WriteLine(" ---------------------------------------------------------------------------------------------------------------------------------- ");
+		toOpen.WriteLine(line.sprintf("              Allocation unit count: %s", memorySizeString(stats.accumulatedAllocUnitCount)));
+		toOpen.WriteLine(line.sprintf("            Reported to application: %s", memorySizeString(stats.accumulatedReportedMemory)));
+		toOpen.WriteLine(line.sprintf("                             Actual: %s", memorySizeString(stats.accumulatedActualMemory)));
+		toOpen.WriteLine("");
 
-	fprintf(fp, " ---------------------------------------------------------------------------------------------------------------------------------- \r\n");
-	fprintf(fp, "|                                                      A C C U M U L A T E D                                                       |\r\n");
-	fprintf(fp, " ---------------------------------------------------------------------------------------------------------------------------------- \r\n");
-	fprintf(fp, "              Allocation unit count: %s\r\n", memorySizeString(stats.accumulatedAllocUnitCount));
-	fprintf(fp, "            Reported to application: %s\r\n", memorySizeString(stats.accumulatedReportedMemory));
-	fprintf(fp, "                             Actual: %s\r\n", memorySizeString(stats.accumulatedActualMemory));
-	fprintf(fp, "\r\n");
+		toOpen.WriteLine(" ---------------------------------------------------------------------------------------------------------------------------------- ");
+		toOpen.WriteLine("|                                                           U N U S E D                                                            |");
+		toOpen.WriteLine(" ---------------------------------------------------------------------------------------------------------------------------------- ");
+		toOpen.WriteLine(line.sprintf("Memory allocated but not in use: %s", memorySizeString(m_calcAllUnused())));
+		toOpen.WriteLine("\n");
 
-	fprintf(fp, " ---------------------------------------------------------------------------------------------------------------------------------- \r\n");
-	fprintf(fp, "|                                                           U N U S E D                                                            |\r\n");
-	fprintf(fp, " ---------------------------------------------------------------------------------------------------------------------------------- \r\n");
-	fprintf(fp, "    Memory allocated but not in use: %s\r\n", memorySizeString(m_calcAllUnused()));
-	fprintf(fp, "\r\n");
+		dumpAllocations(toOpen);
 
-	dumpAllocations(fp);
-
-
-	fclose(fp);
+		toOpen.Close();
+	}
+	overrideTracking = false;
 }
 
 // ---------------------------------------------------------------------------------------------------------------------------------
@@ -1586,10 +1607,14 @@ char* LogToMemory(char* log)
 MUTEX* CreateMutex()
 {
 	MUTEX* mutex = (MUTEX*)malloc(sizeof(MUTEX));
-	new(mutex) MUTEX();
 
-#ifdef WIN32
-	InitializeCriticalSectionAndSpinCount(mutex, 0x0400);
+#if defined(_WIN32)
+	// We cannot use Mutex constructor due to infinite recursion
+	// Build it ourselves
+	mutex->pHandle = (CRITICAL_SECTION*)calloc(1, sizeof(CRITICAL_SECTION));
+	InitializeCriticalSection((CRITICAL_SECTION*)mutex->pHandle);
+#else
+	new (mutex) MUTEX();
 #endif
 	return mutex;
 }
@@ -1598,10 +1623,14 @@ void RemoveMutex(MUTEX*& mutex)
 {
 	if (mutex)
 	{
-#ifdef WIN32
-		DeleteCriticalSection(mutex);
-#endif
+#if defined(_WIN32)
+		// Because we allocated it, we need to free it ourselves
+		CRITICAL_SECTION* cs = (CRITICAL_SECTION*)mutex->pHandle;
+		DeleteCriticalSection(cs);
+		free(cs);
+#else
 		(mutex)->MUTEX::~MUTEX();
+#endif
 		free(mutex);
 		mutex = NULL;
 	}

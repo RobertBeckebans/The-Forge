@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2018 Confetti Interactive Inc.
+ * Copyright (c) 2018-2019 Confetti Interactive Inc.
  *
  * This file is part of The-Forge
  * (see https://github.com/ConfettiFX/The-Forge).
@@ -22,20 +22,17 @@
  * under the License.
 */
 
-#include "../Interfaces/ITimeManager.h"
+#include "../Interfaces/ITime.h"
 #include "../Interfaces/IOperatingSystem.h"
-#include "../Interfaces/IMemoryManager.h"
 
 #ifndef _WIN32
-#include <unistd.h>  // for sleep()
-#include <time.h> // for CLOCK_REALTIME
-#include <cstring> // for memset
+#include <unistd.h>    // for sleep()
+#include <time.h>      // for CLOCK_REALTIME
+#include <cstring>     // for memset
 #endif
+#include "../Interfaces/IMemory.h"
 
-Timer::Timer()
-{
-	Reset();
-}
+Timer::Timer() { Reset(); }
 
 unsigned Timer::GetMSec(bool reset)
 {
@@ -47,10 +44,7 @@ unsigned Timer::GetMSec(bool reset)
 	return elapsedTime;
 }
 
-void Timer::Reset()
-{
-	mStartTime = getSystemTime();
-}
+void Timer::Reset() { mStartTime = getSystemTime(); }
 
 HiresTimer::HiresTimer()
 {
@@ -91,27 +85,8 @@ int64_t HiresTimer::GetUSecAverage()
 	return elapsedTime;
 }
 
-float HiresTimer::GetSeconds(bool reset)
-{
-	return (float)(GetUSec(reset) / 1e6);
-}
+float HiresTimer::GetSeconds(bool reset) { return (float)(GetUSec(reset) / 1e6); }
 
-float HiresTimer::GetSecondsAverage()
-{
-	return (float)(GetUSecAverage() / 1e6);
-}
+float HiresTimer::GetSecondsAverage() { return (float)(GetUSecAverage() / 1e6); }
 
-void HiresTimer::Reset()
-{
-	mStartTime = getUSec();
-}
-
-unsigned TimeManager::GetSystemTime()
-{
-	return getSystemTime();
-}
-
-unsigned TimeManager::GetTimeSinceStart()
-{
-	return getTimeSinceStart();
-}
+void HiresTimer::Reset() { mStartTime = getUSec(); }

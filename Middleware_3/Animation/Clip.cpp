@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2018 Confetti Interactive Inc.
+ * Copyright (c) 2018-2019 Confetti Interactive Inc.
  *
  * This file is part of The-Forge
  * (see https://github.com/ConfettiFX/The-Forge).
@@ -24,15 +24,9 @@
 
 #include "Clip.h"
 
-void Clip::Initialize(const char* animationFile, Rig* rig)
-{
-	LoadClip(animationFile); 
-}
+void Clip::Initialize(const char* animationFile, Rig* rig) { LoadClip(animationFile); }
 
-void Clip::Destroy()
-{
-	mAnimation.Deallocate();
-}
+void Clip::Destroy() { mAnimation.Deallocate(); }
 
 bool Clip::Sample(ozz::animation::SamplingCache* cacheInput, ozz::Range<SoaTransform>& localTransOutput, float timeRatio)
 {
@@ -55,15 +49,14 @@ bool Clip::LoadClip(const char* fileName)
 	ozz::io::File file(fileName, "rb");
 	if (!file.opened())
 	{
-		ozz::log::Err() << "Cannot open file " << fileName << "." << std::endl;
+		ErrorMsg("Cannot open file ");
 		return false;
 	}
 
 	ozz::io::IArchive archive(&file);
 	if (!archive.TestTag<ozz::animation::Animation>())
 	{
-		ozz::log::Err() << "Archive doesn't contain the expected object type." <<
-			std::endl;
+		ErrorMsg("Archive doesn't contain the expected object type.");
 		return false;
 	}
 

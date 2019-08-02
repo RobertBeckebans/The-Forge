@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2018 Confetti Interactive Inc.
+ * Copyright (c) 2018-2019 Confetti Interactive Inc.
  *
  * This file is part of The-Forge
  * (see https://github.com/ConfettiFX/The-Forge).
@@ -25,21 +25,34 @@
 //This file contains abstractions for compiler specific things
 #pragma once
 
-
+#include <stdint.h>
 
 //For getting rid of unreferenced parameter warnings
-#ifdef _MSC_VER //If on Visual Studio
+#ifdef _MSC_VER    //If on Visual Studio
 #define UNREF_PARAM(x) (x)
 #else
 //Add more compilers and platforms as we need them
 #define UNREF_PARAM(x)
 #endif
 
+#if   INTPTR_MAX == 0x7FFFFFFFFFFFFFFFLL
+# define PTR_SIZE 8
+#elif INTPTR_MAX == 0x7FFFFFFF
+# define PTR_SIZE 4
+#else
+#error unsupported platform
+#endif
+
+#ifdef _MSC_VER
+    #define ALIGNAS(x) __declspec( align( x ) ) 
+#else
+    #define ALIGNAS(x)  __attribute__ ((aligned( x )))
+#endif
 
 #if __cplusplus >= 201103
 #define DEFINE_ALIGNED(def, a) alignas(a) def
 #else
-#if defined( _WIN32)
+#if defined(_WIN32)
 #define DEFINE_ALIGNED(def, a) __declspec(align(a)) def
 #elif defined(__OSX__)
 #define DEFINE_ALIGNED(def, a) def __attribute__((aligned(a)))
